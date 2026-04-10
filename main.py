@@ -18,6 +18,26 @@ dp = Dispatcher()
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
+CLUB_URL = os.environ['CLUB_URL']
+
+
+def start_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🎓 Войти в клуб бесплатно",
+                url=CLUB_URL
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🧸 Попробовать приложение 3 дня бесплатно",
+                web_app=WebAppInfo(url=MINI_APP_URL)
+            )
+        ]
+    ])
+
+
 def app_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
@@ -31,9 +51,12 @@ def app_keyboard():
 async def cmd_start(message: types.Message):
     await message.answer(
         "Привет! 👋\n\n"
-        "«Займи малыша» — быстрые игры для детей из подручных вещей, без экранов.\n\n"
-        "У тебя есть <b>3 дня бесплатного доступа</b>. Попробуй прямо сейчас! 👇",
-        reply_markup=app_keyboard(),
+        "Я помогу тебе занять ребёнка за 5 минут — без экранов и дорогих игрушек.\n\n"
+        "Что тебя ждёт:\n"
+        "🎓 <b>Клуб «Развитие для детей»</b> — 800+ шаблонов для печати, планы занятий, идеи игр и поделок. Бесплатно навсегда.\n\n"
+        "🧸 <b>Приложение «Займи малыша»</b> — выбираешь возраст ребёнка и что есть дома, получаешь готовую игру за 5 секунд. 3 дня бесплатно.\n\n"
+        "Выбирай 👇",
+        reply_markup=start_keyboard(),
         parse_mode="HTML"
     )
 
