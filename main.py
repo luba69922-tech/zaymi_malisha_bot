@@ -2,8 +2,8 @@ import asyncio
 import os
 from datetime import datetime, timezone, timedelta
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from supabase import create_client
@@ -12,13 +12,12 @@ BOT_TOKEN = os.environ['BOT_TOKEN']
 SUPABASE_URL = os.environ['SUPABASE_URL']
 SUPABASE_SERVICE_KEY = os.environ['SUPABASE_SERVICE_KEY']
 MINI_APP_URL = os.environ['MINI_APP_URL']
+CLUB_URL = os.environ['CLUB_URL']
+ADMIN_ID = int(os.environ['ADMIN_ID'])
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-
-CLUB_URL = os.environ['CLUB_URL']
 
 
 def start_keyboard():
@@ -61,10 +60,55 @@ async def cmd_start(message: types.Message):
     )
 
 
+# ── Рассылка (только для админа) ──────────────────────────────────────────────
+@dp.message(Command('broadcast'))
+async def cmd_broadcast(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.removeprefix('/broadcast').strip()
+    if not text:
+        await message.answer('Укажи текст сообщения:\n/broadcast Ваш текст')
+        return
+
+    result = supabase.from_('users').select('telegram_id').execute()
+    total = len(result.data)
+    sent = 0
+    failed = 0
+
+    await message.answer(f'Начинаю рассылку для {total} пользователей...')
+
+    for user in result.data:
+        try:
+            await bot.send_message(user['telegram_id'], text, parse_mode='HTML')
+            sent += 1
+        except Exception:
+            failed += 1
+        await asyncio.sleep(0.05)  # защита от флуд-лимита
+
+    await message.answer(f'✅ Рассылка завершена\nОтправлено: {sent}\nОшибок: {failed}')
+
+
+# ── Обратная связь ─────────────────────────────────────────────────────────────
+@dp.message(F.text & ~F.text.startswith('/'))
+async def handle_feedback(message: types.Message):
+    username = f"@{message.from_user.username}" if message.from_user.username else "без username"
+    name = message.from_user.first_name or ""
+
+    await bot.send_message(
+        ADMIN_ID,
+        f"💬 <b>Отзыв от {name} ({username})</b>\n"
+        f"ID: <code>{message.from_user.id}</code>\n\n"
+        f"{message.text}",
+        parse_mode="HTML"
+    )
+    await message.answer("Спасибо за отзыв! 🙏\nМы обязательно прочитаем.")
+
+
+# ── Напоминания о триале ───────────────────────────────────────────────────────
 async def send_reminders():
     now = datetime.now(timezone.utc)
 
-    # Напоминание на 2-й день: до конца триала 24–48 часов
     day2_from = (now + timedelta(hours=24)).isoformat()
     day2_to = (now + timedelta(hours=48)).isoformat()
 
@@ -91,7 +135,6 @@ async def send_reminders():
         except Exception as e:
             print(f"Day2 reminder failed for {user['telegram_id']}: {e}")
 
-    # Напоминание на 3-й день: до конца триала < 24 часов
     day3_to = (now + timedelta(hours=24)).isoformat()
 
     result = supabase.from_('users') \
